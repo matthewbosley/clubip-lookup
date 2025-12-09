@@ -224,22 +224,11 @@
       color:var(--text);
       vertical-align:top;
     }
-    tbody tr:hover td{
-      background: rgba(255,255,255,.02);
-    }
+    tbody tr:hover td{ background: rgba(255,255,255,.02); }
     tbody tr:last-child td{ border-bottom:0; }
     .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
 
-    .right{
-      display:flex;
-      justify-content:flex-end;
-      gap:10px;
-      align-items:center;
-    }
-    .ghost{
-      border:1px solid var(--border);
-      background: rgba(255,255,255,.03);
-    }
+    .right{ display:flex; justify-content:flex-end; gap:10px; align-items:center; }
   </style>
 </head>
 <body>
@@ -247,7 +236,7 @@
     <div class="top">
       <div>
         <h1>What IP is that?</h1>
-        <div class="sub">Paste a WAN public IP (or a prefix) to see the matching club. Or browse all sites.</div>
+        <div class="sub">Paste a WAN public IP (or a prefix) to see the matching club. If not a club, we’ll try Azure service tags.</div>
       </div>
       <div class="actions">
         <span class="pill"><span class="dot"></span> Read-only • Snowflake</span>
@@ -263,11 +252,11 @@
             <input id="ip" placeholder="71.27.119.177" autocomplete="off" inputmode="decimal" />
           </div>
           <button id="btn" class="btn">Search</button>
-          <button id="backBtn" class="btn ghost" style="display:none;">Back</button>
+          <button id="backBtn" class="btn" style="display:none; border:1px solid var(--border); background: rgba(255,255,255,.03);">Back</button>
         </div>
 
         <div class="meta">
-          <div>Source: <code>CLUBIP.PUBLIC.CLUBIP_SEARCH_V</code></div>
+          <div id="sourceLine">Source: <code>CLUBIP.PUBLIC.CLUBIP_SEARCH_V</code></div>
           <div class="right">
             <span id="modePill" class="pill" style="display:none;"><span class="dot"></span><span id="modeText"></span></span>
           </div>
@@ -287,12 +276,14 @@
   const modeChip = document.getElementById("modeChip");
   const modePill = document.getElementById("modePill");
   const modeText = document.getElementById("modeText");
+  const sourceLine = document.getElementById("sourceLine");
 
   let view = "lookup"; // "lookup" | "all"
 
   function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
   function isOkInput(s) {
+    // allow full ip OR prefix like 45.59.198 OR 45.59
     if (!/^(\d{1,3})(\.\d{1,3}){0,3}$/.test(s)) return false;
     return s.split(".").every(o => {
       if (o === "") return false;
@@ -312,11 +303,13 @@
       ipEl.placeholder = "Search code, name, or IP…";
       btn.textContent = "Filter";
       backBtn.style.display = "inline-block";
+      sourceLine.innerHTML = `Source: <code>CLUBIP.PUBLIC.CLUBIP_SEARCH_V</code>`;
     } else {
       modeChip.textContent = "IP";
       ipEl.placeholder = "71.27.119.177";
       btn.textContent = "Search";
       backBtn.style.display = "none";
+      sourceLine.innerHTML = `Source: <code>CLUBIP.PUBLIC.CLUBIP_SEARCH_V</code> → fallback: <code>CLUBIP.PUBLIC.AZURE_SERVICE_TAGS_PREFIXES</code>`;
     }
   }
 
@@ -326,6 +319,56 @@
     let data;
     try { data = JSON.parse(text); } catch { data = { error: text }; }
     return { res, data };
+  }
+
+  function renderClubResults(data) {
+    const matches = data.matches || [];
+    out.innerHTML = `
+      <div class="status"><span>Club results</span><span><b>${matches.length}</b> match(es)</span></div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:120px;">Club</th>
+            <th>Location</th>
+            <th style="width:180px;">WAN IP</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${matches.map(m => `
+            <tr>
+              <td class="mono">${esc(m.club_code ?? m.CLUB_CODE ?? "")}</td>
+              <td>${esc(m.club_name ?? m.CLUB_NAME ?? "")}</td>
+              <td class="mono">${esc(m.wan_ip ?? m.WAN_IP ?? m.wan_ip_extracted ?? m.WAN_IP_EXTRACTED ?? "")}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+  }
+
+  function renderAzureResults(data) {
+    const matches = data.matches || [];
+    out.innerHTML = `
+      <div class="status"><span>Azure service tags</span><span><b>${matches.length}</b> match(es)</span></div>
+      <table>
+        <thead>
+          <tr>
+            <th>Service</th>
+            <th style="width:140px;">Region</th>
+            <th style="width:220px;">Prefix</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${matches.map(m => `
+            <tr>
+              <td>${esc(m.system_service || m.name || "—")}</td>
+              <td>${esc(m.region || "—")}</td>
+              <td class="mono">${esc(m.prefix || "—")}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
   }
 
   async function doLookup() {
@@ -342,42 +385,33 @@
     btn.textContent = "Searching…";
 
     try {
-      const { res, data } = await fetchJson(`/api/lookup?ip=${encodeURIComponent(q)}`);
-      if (!res.ok) {
-        out.innerHTML = `<div class="err">${esc(data?.error || `HTTP ${res.status}`)}</div>`;
+      // 1) Clubs first
+      const club = await fetchJson(`/api/lookup?ip=${encodeURIComponent(q)}`);
+      if (!club.res.ok) {
+        // if club endpoint errors, still try azure
+        console.warn("Club lookup error:", club.data);
+      } else if ((club.data.matches || []).length > 0) {
+        modePill.style.display = "inline-flex";
+        modeText.textContent = `Matched: Club (${club.data.mode || "unknown"})`;
+        renderClubResults(club.data);
         return;
       }
 
-      const matches = data.matches || [];
-      modePill.style.display = "inline-flex";
-      modeText.textContent = `Mode: ${data.mode || "unknown"}`;
-
-      if (!matches.length) {
-        out.innerHTML = `<div class="status"><span>No matches</span><span class="mono">${esc(q)}</span></div>`;
+      // 2) Azure fallback
+      const az = await fetchJson(`/api/azurelookup?ip=${encodeURIComponent(q)}`);
+      if (!az.res.ok) {
+        out.innerHTML = `<div class="err">${esc(az.data?.error || `Azure lookup failed (HTTP ${az.res.status})`)}</div>`;
         return;
       }
 
-      out.innerHTML = `
-        <div class="status"><span>Results</span><span><b>${matches.length}</b> match(es)</span></div>
-        <table>
-          <thead>
-            <tr>
-              <th style="width:120px;">Club</th>
-              <th>Location</th>
-              <th style="width:180px;">WAN IP</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${matches.map(m => `
-              <tr>
-                <td class="mono">${esc(m.club_code)}</td>
-                <td>${esc(m.club_name)}</td>
-                <td class="mono">${esc(m.wan_ip)}</td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-      `;
+      if ((az.data.matches || []).length > 0) {
+        modePill.style.display = "inline-flex";
+        modeText.textContent = `Matched: Azure`;
+        renderAzureResults(az.data);
+        return;
+      }
+
+      out.innerHTML = `<div class="status"><span>No matches</span><span class="mono">${esc(q)}</span></div>`;
     } catch (e) {
       out.innerHTML = `<div class="err">Network/server error.</div>`;
     } finally {
@@ -417,9 +451,9 @@
           <tbody>
             ${sites.map(s => `
               <tr>
-                <td class="mono">${esc(s.club_code)}</td>
-                <td>${esc(s.club_name)}</td>
-                <td class="mono">${esc(s.wan_ip)}</td>
+                <td class="mono">${esc(s.club_code ?? "")}</td>
+                <td>${esc(s.club_name ?? "")}</td>
+                <td class="mono">${esc(s.wan_ip ?? "")}</td>
               </tr>
             `).join("")}
           </tbody>
@@ -456,6 +490,9 @@
     out.style.display = "none";
     ipEl.value = "";
   });
+
+  // initial
+  setView("lookup");
 </script>
 </body>
 </html>

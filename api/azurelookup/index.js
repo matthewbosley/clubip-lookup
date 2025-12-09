@@ -33,18 +33,17 @@ module.exports = async function (context, req) {
     return;
   }
 
-  // Use first 2–3 octets to narrow candidates
-  // e.g. 13.64.151.161 -> "13.64.151" and "13.64"
-  let like1 = q;
+  // This endpoint is IPv4-only for now (no npm available on your box)
+  // If someone enters a prefix (not full ip), we still try.
+  let like3 = q;
   let like2 = q;
 
   if (isIpv4(q)) {
     const parts = q.split(".");
-    like1 = `${parts[0]}.${parts[1]}.${parts[2]}.`; // 3 octets
-    like2 = `${parts[0]}.${parts[1]}.`;            // 2 octets
+    like3 = `${parts[0]}.${parts[1]}.${parts[2]}.`; // e.g. 4.149.254.
+    like2 = `${parts[0]}.${parts[1]}.`;            // e.g. 4.149.
   } else {
-    // if user typed a prefix like "13.64" or "13.64.151"
-    like1 = q.endsWith(".") ? q : (q + ".");
+    like3 = q.endsWith(".") ? q : (q + ".");
     like2 = q;
   }
 
@@ -52,18 +51,23 @@ module.exports = async function (context, req) {
   try {
     await new Promise((resolve, reject) => conn.connect(err => (err ? reject(err) : resolve())));
 
-    // Match prefix strings that begin with the same start (best-effort)
+    // Key piece: split_part(prefix,'/',1) lets us match rows like "4.149.254.68/30"
+    // even without CIDR math libraries.
     const rows = await exec(
       conn,
       `
       select name, system_service, region, platform, prefix
       from CLUBIP.PUBLIC.AZURE_SERVICE_TAGS_PREFIXES
       where ip_version = 4
-        and (prefix like ? || '%' or prefix like ? || '%')
+        and (
+          split_part(prefix, '/', 1) = ?
+          or split_part(prefix, '/', 1) like ? || '%'
+          or split_part(prefix, '/', 1) like ? || '%'
+        )
       order by name
       limit 50
       `,
-      [like1, like2]
+      [q, like3, like2]
     );
 
     context.res = {
@@ -71,7 +75,7 @@ module.exports = async function (context, req) {
       headers: { "content-type": "application/json" },
       body: {
         query: q,
-        note: "Best-effort match (string prefix). Install Node later for exact CIDR containment.",
+        note: "Best-effort match (base IP string). Install Node later for exact CIDR containment (IP inside range).",
         matches: rows.map(r => ({
           name: r.NAME,
           system_service: r.SYSTEM_SERVICE,
