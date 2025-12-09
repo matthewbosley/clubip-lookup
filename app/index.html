@@ -3,53 +3,134 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>IP → Club Lookup</title>
+  <title>What IP is that?</title>
   <style>
     :root{
-      --bg:#0b0f14;
+      --bg:#070b10;
+      --panel: rgba(255,255,255,.04);
+      --panel2: rgba(0,0,0,.25);
       --text:#e6edf3;
       --muted:#9aa4b2;
       --border:rgba(255,255,255,.08);
-      --shadow: 0 20px 60px rgba(0,0,0,.55);
-      --radius:18px;
+      --shadow: 0 30px 80px rgba(0,0,0,.62);
+      --radius:20px;
+      --accent: rgba(125,211,252,.95);
+      --accent2: rgba(167,139,250,.85);
+      --danger: rgba(248,113,113,.85);
     }
     *{box-sizing:border-box}
     body{
       margin:0;
       font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      background: radial-gradient(1200px 600px at 15% 10%, rgba(125,211,252,.10), transparent 60%),
-                  radial-gradient(900px 500px at 90% 20%, rgba(167,139,250,.08), transparent 55%),
-                  var(--bg);
       color:var(--text);
       min-height:100vh;
       display:flex;
-      align-items:flex-start;
       justify-content:center;
       padding:56px 18px;
+
+      background:
+        radial-gradient(900px 520px at 12% 8%, rgba(125,211,252,.16), transparent 60%),
+        radial-gradient(800px 520px at 88% 14%, rgba(167,139,250,.12), transparent 60%),
+        radial-gradient(1200px 800px at 50% 120%, rgba(255,255,255,.06), transparent 55%),
+        var(--bg);
     }
-    .wrap{width:100%; max-width:920px;}
-    .top{display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:18px;}
-    h1{margin:0; font-size:28px; letter-spacing:-.02em; font-weight:650;}
-    .sub{margin-top:6px; color:var(--muted); font-size:14px; line-height:1.4;}
-    .badge{font-size:12px; color:var(--muted); border:1px solid var(--border); padding:8px 10px; border-radius:999px; background: rgba(255,255,255,.03); white-space:nowrap;}
+    .wrap{width:100%; max-width:980px;}
+    .top{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-end;
+      gap:16px;
+      margin-bottom:18px;
+    }
+    h1{
+      margin:0;
+      font-size:32px;
+      letter-spacing:-.03em;
+      font-weight:720;
+      line-height:1.05;
+    }
+    .sub{
+      margin-top:8px;
+      color:var(--muted);
+      font-size:14px;
+      line-height:1.4;
+    }
+    .actions{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:9px 12px;
+      border-radius:999px;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.03);
+      color:var(--muted);
+      font-size:12px;
+      white-space:nowrap;
+    }
+    .dot{
+      width:8px; height:8px; border-radius:50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 4px rgba(125,211,252,.12);
+    }
+    a.link{
+      color: var(--text);
+      text-decoration:none;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.03);
+      padding:9px 12px;
+      border-radius:999px;
+      font-size:12px;
+      transition: background .15s ease, border-color .15s ease, transform .08s ease;
+    }
+    a.link:hover{ background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.14); }
+    a.link:active{ transform: translateY(1px); }
 
     .card{
-      background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
       border:1px solid var(--border);
       border-radius:var(--radius);
-      box-shadow: var(--shadow);
       overflow:hidden;
+      box-shadow: var(--shadow);
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      position:relative;
     }
-    .card-inner{padding:18px;}
-    .row{display:flex; gap:10px; align-items:center; margin-top:14px;}
+    .card:before{
+      content:"";
+      position:absolute; inset:-1px;
+      background: linear-gradient(120deg, rgba(125,211,252,.18), rgba(167,139,250,.12), transparent 65%);
+      opacity:.35;
+      pointer-events:none;
+    }
+    .card > *{ position:relative; }
+    .card-inner{ padding:18px; }
+
+    .row{ display:flex; gap:10px; align-items:center; margin-top:14px; }
     .input{
-      flex:1; display:flex; align-items:center; gap:10px;
-      background: rgba(0,0,0,.25);
+      flex:1;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      background: var(--panel2);
       border:1px solid var(--border);
-      border-radius:14px;
+      border-radius:16px;
       padding:12px 12px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
     }
-    .input input{
+    .chip{
+      color:var(--muted);
+      font-size:12px;
+      border:1px solid var(--border);
+      padding:5px 9px;
+      border-radius:999px;
+      background: rgba(255,255,255,.03);
+    }
+    input{
       width:100%;
       border:0; outline:0;
       background:transparent;
@@ -57,31 +138,25 @@
       font-size:15px;
       letter-spacing:.01em;
     }
-    .hintchip{
-      color:var(--muted);
-      font-size:12px;
-      border:1px solid var(--border);
-      padding:4px 8px;
-      border-radius:999px;
-      background: rgba(255,255,255,.03);
-    }
+
     .btn{
       border:1px solid rgba(125,211,252,.25);
       background: rgba(125,211,252,.10);
       color:var(--text);
-      border-radius:14px;
+      border-radius:16px;
       padding:12px 14px;
       font-size:14px;
       cursor:pointer;
-      transition: transform .08s ease, background .15s ease, border-color .15s ease;
-      min-width:110px;
+      transition: transform .08s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease;
+      min-width:120px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
     }
     .btn:hover{ background: rgba(125,211,252,.14); border-color: rgba(125,211,252,.35); }
     .btn:active{ transform: translateY(1px); }
     .btn:disabled{ opacity:.6; cursor:not-allowed; }
 
     .meta{
-      margin-top:10px;
+      margin-top:12px;
       color:var(--muted);
       font-size:12.5px;
       display:flex;
@@ -101,7 +176,7 @@
     .out{
       border-top:1px solid var(--border);
       background: rgba(0,0,0,.18);
-      padding:14px 18px;
+      padding:16px 18px;
       display:none;
     }
     .status{
@@ -109,31 +184,32 @@
       align-items:center;
       justify-content:space-between;
       gap:12px;
-      margin-bottom:10px;
+      margin-bottom:12px;
       color:var(--muted);
       font-size:13px;
     }
-    .status b{ color: var(--text); font-weight:600; }
+    .status b{ color: var(--text); font-weight:650; }
+
     .err{
       color:#fecaca;
       border:1px solid rgba(248,113,113,.25);
       background: rgba(248,113,113,.08);
       padding:10px 12px;
-      border-radius:12px;
+      border-radius:14px;
       font-size:13px;
     }
 
     table{
       width:100%;
       border-collapse: collapse;
-      border-radius:14px;
+      border-radius:16px;
       border:1px solid var(--border);
       background: rgba(255,255,255,.02);
       overflow:hidden;
     }
     thead th{
       text-align:left;
-      font-weight:600;
+      font-weight:650;
       font-size:12px;
       color:var(--muted);
       padding:12px 12px;
@@ -146,33 +222,55 @@
       border-bottom:1px solid rgba(255,255,255,.06);
       font-size:14px;
       color:var(--text);
+      vertical-align:top;
+    }
+    tbody tr:hover td{
+      background: rgba(255,255,255,.02);
     }
     tbody tr:last-child td{ border-bottom:0; }
     .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+
+    .right{
+      display:flex;
+      justify-content:flex-end;
+      gap:10px;
+      align-items:center;
+    }
+    .ghost{
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.03);
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="top">
       <div>
-        <h1>IP → Club</h1>
-        <div class="sub">Lookup a club by WAN public IP. Supports full IP (<span class="mono">45.59.198.12</span>) or prefix (<span class="mono">45.59.198</span>).</div>
+        <h1>What IP is that?</h1>
+        <div class="sub">Paste a WAN public IP (or a prefix) to see the matching club. Or browse all sites.</div>
       </div>
-      <div class="badge">Read-only • Snowflake-backed</div>
+      <div class="actions">
+        <span class="pill"><span class="dot"></span> Read-only • Snowflake</span>
+        <a class="link" href="#" id="allLink">View all sites →</a>
+      </div>
     </div>
 
     <div class="card">
       <div class="card-inner">
         <div class="row">
           <div class="input">
-            <span class="hintchip">IP</span>
+            <span class="chip" id="modeChip">IP</span>
             <input id="ip" placeholder="71.27.119.177" autocomplete="off" inputmode="decimal" />
           </div>
           <button id="btn" class="btn">Search</button>
+          <button id="backBtn" class="btn ghost" style="display:none;">Back</button>
         </div>
 
         <div class="meta">
           <div>Source: <code>CLUBIP.PUBLIC.CLUBIP_SEARCH_V</code></div>
+          <div class="right">
+            <span id="modePill" class="pill" style="display:none;"><span class="dot"></span><span id="modeText"></span></span>
+          </div>
         </div>
       </div>
 
@@ -184,8 +282,15 @@
   const ipEl = document.getElementById("ip");
   const btn = document.getElementById("btn");
   const out = document.getElementById("out");
+  const allLink = document.getElementById("allLink");
+  const backBtn = document.getElementById("backBtn");
+  const modeChip = document.getElementById("modeChip");
+  const modePill = document.getElementById("modePill");
+  const modeText = document.getElementById("modeText");
 
-  function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  let view = "lookup"; // "lookup" | "all"
+
+  function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
   function isOkInput(s) {
     if (!/^(\d{1,3})(\.\d{1,3}){0,3}$/.test(s)) return false;
@@ -196,9 +301,37 @@
     });
   }
 
-  async function search() {
+  function setView(next) {
+    view = next;
+    out.style.display = "block";
+    modePill.style.display = "none";
+    modeText.textContent = "";
+
+    if (view === "all") {
+      modeChip.textContent = "Filter";
+      ipEl.placeholder = "Search code, name, or IP…";
+      btn.textContent = "Filter";
+      backBtn.style.display = "inline-block";
+    } else {
+      modeChip.textContent = "IP";
+      ipEl.placeholder = "71.27.119.177";
+      btn.textContent = "Search";
+      backBtn.style.display = "none";
+    }
+  }
+
+  async function fetchJson(url) {
+    const res = await fetch(url);
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = { error: text }; }
+    return { res, data };
+  }
+
+  async function doLookup() {
     const q = ipEl.value.trim();
     out.style.display = "block";
+    modePill.style.display = "none";
 
     if (!q || !isOkInput(q)) {
       out.innerHTML = `<div class="err">Enter a valid IPv4 or prefix (e.g. 45.59.198.12 or 45.59.198).</div>`;
@@ -209,19 +342,16 @@
     btn.textContent = "Searching…";
 
     try {
-      const res = await fetch(`/api/lookup?ip=${encodeURIComponent(q)}`);
-      const text = await res.text();
-
-      let data;
-      try { data = JSON.parse(text); }
-      catch { data = { error: text }; }
-
+      const { res, data } = await fetchJson(`/api/lookup?ip=${encodeURIComponent(q)}`);
       if (!res.ok) {
         out.innerHTML = `<div class="err">${esc(data?.error || `HTTP ${res.status}`)}</div>`;
         return;
       }
 
       const matches = data.matches || [];
+      modePill.style.display = "inline-flex";
+      modeText.textContent = `Mode: ${data.mode || "unknown"}`;
+
       if (!matches.length) {
         out.innerHTML = `<div class="status"><span>No matches</span><span class="mono">${esc(q)}</span></div>`;
         return;
@@ -240,9 +370,9 @@
           <tbody>
             ${matches.map(m => `
               <tr>
-                <td class="mono">${esc(m.club_code ?? "")}</td>
-                <td>${esc(m.club_name ?? "")}</td>
-                <td class="mono">${esc(m.wan_ip ?? "")}</td>
+                <td class="mono">${esc(m.club_code)}</td>
+                <td>${esc(m.club_name)}</td>
+                <td class="mono">${esc(m.wan_ip)}</td>
               </tr>
             `).join("")}
           </tbody>
@@ -252,12 +382,80 @@
       out.innerHTML = `<div class="err">Network/server error.</div>`;
     } finally {
       btn.disabled = false;
-      btn.textContent = "Search";
+      btn.textContent = (view === "all") ? "Filter" : "Search";
     }
   }
 
-  btn.addEventListener("click", search);
-  ipEl.addEventListener("keydown", (e) => { if (e.key === "Enter") search(); });
+  async function showAll() {
+    const q = ipEl.value.trim();
+    out.style.display = "block";
+    modePill.style.display = "none";
+
+    btn.disabled = true;
+    btn.textContent = "Loading…";
+
+    try {
+      const url = q ? `/api/sites?q=${encodeURIComponent(q)}` : `/api/sites`;
+      const { res, data } = await fetchJson(url);
+
+      if (!res.ok) {
+        out.innerHTML = `<div class="err">${esc(data?.error || `HTTP ${res.status}`)}</div>`;
+        return;
+      }
+
+      const sites = data.sites || [];
+      out.innerHTML = `
+        <div class="status"><span>All sites</span><span><b>${sites.length}</b> shown</span></div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:120px;">Club</th>
+              <th>Location</th>
+              <th style="width:180px;">WAN IP</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sites.map(s => `
+              <tr>
+                <td class="mono">${esc(s.club_code)}</td>
+                <td>${esc(s.club_name)}</td>
+                <td class="mono">${esc(s.wan_ip)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    } catch (e) {
+      out.innerHTML = `<div class="err">Network/server error.</div>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Filter";
+    }
+  }
+
+  btn.addEventListener("click", () => {
+    if (view === "all") showAll();
+    else doLookup();
+  });
+
+  ipEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      if (view === "all") showAll();
+      else doLookup();
+    }
+  });
+
+  allLink.addEventListener("click", (e) => {
+    e.preventDefault();
+    setView("all");
+    showAll();
+  });
+
+  backBtn.addEventListener("click", () => {
+    setView("lookup");
+    out.style.display = "none";
+    ipEl.value = "";
+  });
 </script>
 </body>
 </html>
