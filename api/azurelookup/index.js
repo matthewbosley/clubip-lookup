@@ -22,8 +22,21 @@ function exec(conn, sqlText, binds = []) {
   });
 }
 
-function isIpv4(s) {
-  return /^(\d{1,3})(\.\d{1,3}){3}$/.test(s);
+function isFullIpv4(s) {
+  if (!/^(\d{1,3})(\.\d{1,3}){3}$/.test(s)) return false;
+  return s.split(".").every(o => {
+    const n = Number(o);
+    return Number.isInteger(n) && n >= 0 && n <= 255;
+  });
+}
+
+function isIpv4Prefix(s) {
+  // allow 1-3 octets: 4  or 4.145 or 4.145.74  (no trailing dot required)
+  if (!/^(\d{1,3})(\.\d{1,3}){0,2}$/.test(s)) return false;
+  return s.split(".").every(o => {
+    const n = Number(o);
+    return Number.isInteger(n) && n >= 0 && n <= 255;
+  });
 }
 
 module.exports = async function (context, req) {
@@ -33,49 +46,54 @@ module.exports = async function (context, req) {
     return;
   }
 
-  // This endpoint is IPv4-only for now (no npm available on your box)
-  // If someone enters a prefix (not full ip), we still try.
-  let like3 = q;
-  let like2 = q;
-
-  if (isIpv4(q)) {
-    const parts = q.split(".");
-    like3 = `${parts[0]}.${parts[1]}.${parts[2]}.`; // e.g. 4.149.254.
-    like2 = `${parts[0]}.${parts[1]}.`;            // e.g. 4.149.
-  } else {
-    like3 = q.endsWith(".") ? q : (q + ".");
-    like2 = q;
-  }
-
   const conn = openConn();
+
   try {
     await new Promise((resolve, reject) => conn.connect(err => (err ? reject(err) : resolve())));
 
-    // Key piece: split_part(prefix,'/',1) lets us match rows like "4.149.254.68/30"
-    // even without CIDR math libraries.
-    const rows = await exec(
-      conn,
-      `
-      select name, system_service, region, platform, prefix
-      from CLUBIP.PUBLIC.AZURE_SERVICE_TAGS_PREFIXES
-      where ip_version = 4
-        and (
-          split_part(prefix, '/', 1) = ?
-          or split_part(prefix, '/', 1) like ? || '%'
-          or split_part(prefix, '/', 1) like ? || '%'
-        )
-      order by name
-      limit 50
-      `,
-      [q, like3, like2]
-    );
+    let rows = [];
+
+    if (isFullIpv4(q)) {
+      // STRICT: only match prefixes whose base IP equals the searched IP
+      rows = await exec(
+        conn,
+        `
+        select name, system_service, region, platform, prefix
+        from CLUBIP.PUBLIC.AZURE_SERVICE_TAGS_PREFIXES
+        where ip_version = 4
+          and split_part(prefix, '/', 1) = ?
+        order by system_service, region, prefix
+        limit 50
+        `,
+        [q]
+      );
+    } else if (isIpv4Prefix(q)) {
+      // Prefix search mode (only when user did NOT provide a full IP)
+      const like = q.endsWith(".") ? q : (q + ".");
+      rows = await exec(
+        conn,
+        `
+        select name, system_service, region, platform, prefix
+        from CLUBIP.PUBLIC.AZURE_SERVICE_TAGS_PREFIXES
+        where ip_version = 4
+          and split_part(prefix, '/', 1) like ? || '%'
+        order by system_service, region, prefix
+        limit 50
+        `,
+        [like]
+      );
+    } else {
+      context.res = { status: 400, body: { error: "Enter a valid IPv4 (x.x.x.x) or IPv4 prefix (x, x.x, x.x.x)" } };
+      return;
+    }
 
     context.res = {
       status: 200,
       headers: { "content-type": "application/json" },
       body: {
         query: q,
-        note: "Best-effort match (base IP string). Install Node later for exact CIDR containment (IP inside range).",
+        mode: isFullIpv4(q) ? "exact-base-ip" : "prefix",
+        note: "This is strict base-IP matching. True CIDR containment (IP inside range) requires Node/npm or a more complex SQL UDF.",
         matches: rows.map(r => ({
           name: r.NAME,
           system_service: r.SYSTEM_SERVICE,
